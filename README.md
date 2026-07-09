@@ -1,5 +1,6 @@
 # Open-Hook 🪝
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 Open-Hook is an open-source, ultra-lightweight Webhook Inspector built for developers. It provides a real-time, zero-configuration temporary mailbox to instantly catch and inspect HTTP requests, making third-party webhook integrations (like Stripe, GitHub, or Twilio) completely painless to test locally.
 
 ## Why Open-Hook?
