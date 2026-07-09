@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open-Hook | Webhook Inspector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 flex justify-between items-end border-b border-gray-700 pb-4">
+            <div>
+                <h1 class="text-3xl font-bold text-blue-400">Open-Hook</h1>
+                <p class="text-gray-400 mt-2">Open-Source Webhook Inspector</p>
+            </div>
+        </header>
+
+        <div class="bg-gray-800 rounded-lg p-6 mb-8 border border-gray-700 shadow-lg">
+            <h2 class="text-sm uppercase tracking-wide text-gray-400 mb-2">Your Unique Webhook URL</h2>
+            <div class="flex items-center gap-4">
+                <input type="text" id="webhook-url" readonly class="flex-1 bg-gray-900 border border-gray-700 rounded p-3 text-green-400 font-mono text-sm focus:outline-none focus:border-blue-500">
+                <button onclick="copyUrl()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded font-medium transition-colors">Copy</button>
+            </div>
+            <p class="text-xs text-gray-500 mt-3">Send POST, GET, PUT, or DELETE requests to this URL. They will appear below in real-time.</p>
+        </div>
+
+        <div id="requests-container" class="space-y-6">
+            <div id="waiting-msg" class="text-center py-12 text-gray-500 animate-pulse">
+                Waiting for incoming requests...
+            </div>
+            <!-- Request cards will go here -->
+        </div>
+    </div>
+
+    <script>
+        // Generate UUID or get from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        let uuid = urlParams.get('uuid');
+        if (!uuid) {
+            uuid = crypto.randomUUID();
+            window.location.search = `?uuid=${uuid}`;
+        }
+
+        const webhookUrl = `${window.location.origin}/api/webhook/${uuid}`;
+        document.getElementById('webhook-url').value = webhookUrl;
+
+        function copyUrl() {
+            const input = document.getElementById('webhook-url');
+            input.select();
+            document.execCommand('copy');
+            alert('Copied to clipboard!');
+        }
+
+        const container = document.getElementById('requests-container');
+        const waitingMsg = document.getElementById('waiting-msg');
+
+        function renderRequest(req) {
+            if (waitingMsg) waitingMsg.style.display = 'none';
+
+            let bodyContent = req.body;
+            try {
+                // Try to format JSON nicely
+                const parsed = JSON.parse(req.body);
+                bodyContent = JSON.stringify(parsed, null, 2);
+            } catch (e) {}
+
+            let headersContent = req.headers;
+            try {
+                const parsedHeaders = JSON.parse(req.headers);
+                headersContent = JSON.stringify(parsedHeaders, null, 2);
+            } catch (e) {}
+
+            const methodColor = req.method === 'POST' ? 'text-green-400' : 
+                                req.method === 'GET' ? 'text-blue-400' : 'text-yellow-400';
+
+            const card = document.createElement('div');
+            card.className = "bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-md";
+            card.innerHTML = `
+                <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold ${methodColor} uppercase tracking-wider">${req.method}</span>
+                        <span class="text-gray-400 text-sm">/api/webhook/${req.urlId}</span>
+                    </div>
+                    <span class="text-gray-500 text-sm">${new Date(req.timestamp).toLocaleTimeString()}</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-xs uppercase text-gray-500 mb-2">Headers</h3>
+                        <pre class="bg-gray-900 p-4 rounded border border-gray-700 text-xs text-gray-300 overflow-x-auto font-mono">${headersContent}</pre>
+                    </div>
+                    <div>
+                        <h3 class="text-xs uppercase text-gray-500 mb-2">Payload Body</h3>
+                        <pre class="bg-gray-900 p-4 rounded border border-gray-700 text-xs text-blue-300 overflow-x-auto font-mono">${bodyContent || 'No Body'}</pre>
+                    </div>
+                </div>
+            `;
+            container.prepend(card);
+        }
+
+        // Fetch historical requests
+        fetch(`/api/requests/${uuid}`)
+            .then(res => res.json())
+            .then(data => {
+                // Since prepend adds to top, we should iterate in reverse if they come sorted newest first
+                // Wait, if it's descending, the first element is the newest.
+                // If we prepend the newest first, it ends up at the bottom!
+                // So we append to DOM for historical, or reverse the array and prepend.
+                data.reverse().forEach(renderRequest);
+            });
+
+        // Listen for new requests via Server-Sent Events
+        const evtSource = new EventSource(`/api/stream/${uuid}`);
+        evtSource.addEventListener("webhook", function(event) {
+            const newRequest = JSON.parse(event.data);
+            renderRequest(newRequest);
+        });
+    </script>
+</body>
+</html>
